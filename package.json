@@ -14,7 +14,7 @@
   },
   "repository"  : {
     "type": "git",
-    "url" : "git://github.com"
+    "url" : "https://github.com/vandernorth/node-megamon-monitoring-server-report.git"
   },
   "engines"     : {
     "node": ">=6.9.0"
