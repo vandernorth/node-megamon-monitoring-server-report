@@ -20,6 +20,7 @@ class Report {
         this.path     = configuration.path;
         this.headers  = configuration.headers;
         this.version  = packageInfo.version;
+        this.debug    = configuration.debug === true;
     }
 
     createReport() {
@@ -48,14 +49,14 @@ class Report {
                         let diskObject   = {};
                         diskObject.count = diskArray.length;
                         diskObject.disks = {};
-                        diskArray.forEach(disk => {
-                            const diskName             = 'disk.' + disk.mountpoints.map(mp => mp.path).join('.').replace(/:/gmi, '');
-                            diskObject.disks[diskName] = disk;
-                        });
+                        //diskArray.forEach(disk => {
+                        //    const diskName             = 'disk.' + disk.mountpoints.map(mp =>
+                        // mp.path).join('.').replace(/:/gmi, ''); diskObject.disks[diskName] = disk; });
+                        // resolve(diskObject);
+                        diskObject.disks = diskArray;
                         resolve(diskObject);
                     })
                     .catch(reject);
-
             });
         });
 
@@ -63,15 +64,15 @@ class Report {
 
     getOneMountPoint( driveInfo ) {
         return new Promise(( resolve, reject ) => {
-            storage.getPartitionSpace(driveInfo.mountpoints[0].path, ( error, space ) => {
+            let mountPoint = _.result(driveInfo, 'mountpoints[0].path') || driveInfo.device;
+            storage.getPartitionSpace(mountPoint, ( error, space ) => {
                 if ( error ) {
                     console.error('Cannot get diskSpace for', driveInfo.device, error.message);
                     reject(error);
-
                 } else {
-                    driveInfo.space       = space;
-                    driveInfo.space.inUse = 100 - (driveInfo.space.freeMegaBytes / driveInfo.space.totalMegaBytes * 100);
-
+                    space.inUse = 100 - (space.freeMegaBytes / space.totalMegaBytes * 100);
+                    _.merge(driveInfo, space);
+                    driveInfo.mountpoints = driveInfo.mountpoints.map(mp => mp.path).join(',');
                     resolve(driveInfo);
                 }
             });
@@ -80,13 +81,12 @@ class Report {
 
     serverStatus() {
         return new Promise(( resolve, reject ) => {
-            const network    = os.networkInterfaces(),
-                  load       = os.loadavg(),
-                  cpus       = os.cpus();
-            let serverData   = {};
-            serverData.cpu   = _.uniq(cpus.map(c => c.model)).join(', ');
-            serverData.cores = cpus.length;
-
+            const network       = os.networkInterfaces(),
+                  load          = os.loadavg(),
+                  cpu           = os.cpus();
+            let serverData      = {};
+            serverData.cpu      = _.uniq(cpu.map(c => c.model)).join(', ');
+            serverData.cores    = cpu.length;
             serverData.load1    = load[0];
             serverData.load5    = load[1];
             serverData.load15   = load[2];
@@ -95,13 +95,27 @@ class Report {
             serverData.platform = os.platform();
             serverData.arch     = os.arch();
             serverData.release  = os.release();
-            serverData.type     = os.type();
+            serverData.osType   = os.type();
             serverData.hostname = os.hostname();
             serverData.memFree  = os.freemem();
             serverData.memTotal = os.totalmem();
             serverData.memInUse = 100 - (serverData.memFree / serverData.memTotal * 100);
             serverData.uptime   = os.uptime();
-            resolve(serverData);
+
+            if ( serverData.platform === 'win32' ) {
+                const winCpu = require('windows-cpu');
+                winCpu.totalLoad(( error, cpuInfo ) => {
+                    if ( !error ) {
+                        serverData.load1 = cpuInfo.length === 1 ? cpuInfo[0] : _.mean(cpuInfo);
+                        delete serverData.load5;
+                        delete serverData.load15;
+                    }
+                    resolve(serverData);
+                });
+
+            } else {
+                resolve(serverData);
+            }
         });
     }
 
@@ -119,7 +133,11 @@ class Report {
                       }, this.headers)
                   };
 
-            //console.info('post-data', JSON.stringify(info, null, '\t'));
+            if ( this.debug === true ) {
+                console.info('post-to', JSON.stringify(options, null, '\t'));
+                console.info('post-data', JSON.stringify(info, null, '\t'));
+                return resolve();
+            }
 
             let req = https.request(options, ( res ) => {
                 console.log(`SEND::STATUS: ${res.statusCode}`);

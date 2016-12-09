@@ -3,10 +3,11 @@
   "author"      : "Jeffrey van Norden <jeffreyvannorden@gmail.com>",
   "description" : "Server state reporter for mega monitoring",
   "main"        : "report.js",
-  "version"     : "1.0.2",
+  "version"     : "1.0.5",
   "dependencies": {
     "storage-device-info": "*",
     "drivelist"          : "*",
+    "windows-cpu"        : "*",
     "lodash"             : "*"
   },
   "scripts"     : {
